@@ -131,7 +131,7 @@
   }
   input.num{font-family:var(--mono);text-align:right;font-variant-numeric:tabular-nums}
   input::placeholder{color:var(--ink-3)}
-  input:focus-visible,select:focus-visible,button:focus-visible,.chk input:focus-visible+span{
+  input:focus-visible,select:focus-visible,button:focus-visible{
     outline:2px solid var(--accent);outline-offset:2px;
   }
   select{appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--ink-2) 50%),linear-gradient(135deg,var(--ink-2) 50%,transparent 50%);
@@ -196,20 +196,37 @@
   }
   .split-note.warn{border-left-color:var(--neg);color:var(--neg)}
   .split-note b{color:var(--ink);font-weight:600}
-  .chks{display:flex;flex-wrap:wrap;gap:6px}
-  .chk{position:relative;display:inline-flex}
-  .chk input{position:absolute;inset:0;opacity:0;width:100%;height:100%;margin:0;cursor:pointer}
-  .chk span{
-    padding:5px 11px;border:1px solid var(--rule-strong);border-radius:999px;
-    font-size:13px;color:var(--ink-3);background:var(--field);user-select:none;
-    transition:background .12s ease,color .12s ease;
+  .field-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px 12px;flex-wrap:wrap}
+  .quick{display:flex;gap:4px;flex-wrap:wrap}
+  .quick button{
+    padding:2px 8px;font-size:11.5px;background:transparent;color:var(--ink-3);
+    border:1px solid var(--rule);
   }
-  @media (prefers-reduced-motion:reduce){.chk span{transition:none}}
-  .chk input:checked+span{background:var(--accent);border-color:var(--accent);color:var(--card);font-weight:600}
-  .chk.all span{border-style:dashed}
+  .quick button:hover{color:var(--ink);border-color:var(--ink-3)}
+
+  .chks{display:flex;flex-wrap:wrap;gap:6px}
+  .mchip{
+    display:inline-flex;align-items:center;gap:5px;
+    padding:4px 5px 4px 11px;border:1px solid var(--rule-strong);border-radius:999px;
+    background:var(--accent-soft);font-size:13px;
+  }
+  .mchip .who{
+    padding:0;background:transparent;border:0;color:var(--ink);
+    font-family:var(--sans);font-size:13px;font-weight:600;
+  }
+  .mchip .dr{
+    padding:2px 7px;border-radius:999px;font-family:var(--mono);
+    font-size:10px;font-weight:600;letter-spacing:.04em;
+    background:var(--accent);color:var(--on-accent);border:1px solid var(--accent);
+  }
+  .mchip.nodrink .dr{background:transparent;color:var(--ink-3);border-color:var(--rule-strong)}
+  .mchip.out{background:transparent;border-style:dashed;padding-right:11px}
+  .mchip.out .who{color:var(--ink-3);text-decoration:line-through}
 
   /* ── ledger list ────────────────────────────── */
-  .ledger{width:100%;border-collapse:collapse;font-size:14px}
+  .ledger{width:100%;min-width:352px;border-collapse:collapse;font-size:14px}
+  .ledger th{white-space:nowrap}
+  .ledger td:nth-child(2){white-space:nowrap}
   .ledger th{
     text-align:left;font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;
     color:var(--ink-3);padding:0 10px 7px;border-bottom:1px solid var(--rule);
@@ -226,6 +243,11 @@
   .ledger tfoot td{padding:11px 10px;font-weight:600;border-bottom:none}
   .ledger .del{background:transparent;color:var(--ink-3);padding:2px 6px;font-size:15px;line-height:1}
   .ledger .del:hover{color:var(--neg)}
+  .ledger .edit{background:transparent;color:var(--ink-3);padding:2px 6px;font-size:12px;line-height:1}
+  .ledger .edit:hover{color:var(--accent)}
+  .ledger .acts{display:flex;gap:2px;white-space:nowrap}
+  .ledger tr.editing td{background:var(--accent-soft)}
+  .ledger tr.editing td:first-child{box-shadow:inset 2px 0 0 var(--accent)}
   .table-scroll{overflow-x:auto;min-width:0;margin:0 -18px;padding:0 18px}
   .empty{color:var(--ink-3);font-size:13.5px;text-align:center;padding:22px 0;margin:0}
 
@@ -320,9 +342,8 @@
           <p class="hint">쉼표나 띄어쓰기로 여러 명을 한 번에 넣을 수 있어요.</p>
           <ul class="people" id="people-list"></ul>
           <p class="legend" id="people-legend" hidden>
-            <span><b>술 O</b> 술값도 함께 부담</span>
-            <span class="off"><b>술 X</b> 술값은 빼고 계산</span>
-            <span>이름 옆 표시를 눌러 바꿔요.</span>
+            <span><b>술 O</b> / <span class="off"><b>술 X</b></span> 새 지출을 적을 때의 기본값</span>
+            <span>차수마다 다르면 지출 내역에서 그 자리에 맞게 바꿔요.</span>
           </p>
         </div>
       </section>
@@ -353,12 +374,20 @@
               </label>
             </div>
             <div class="field">
-              <span class="field-label">함께 쓴 사람</span>
+              <span class="field-head">
+                <span class="field-label">이 자리에 있던 사람</span>
+                <span class="quick" id="member-quick">
+                  <button type="button" data-q="all">전원 참여</button>
+                  <button type="button" data-q="drink">모두 술 O</button>
+                  <button type="button" data-q="dry">모두 술 X</button>
+                </span>
+              </span>
               <div class="chks" id="exp-members"></div>
             </div>
             <p class="split-note" id="split-note"></p>
             <div class="row">
-              <button class="btn" type="submit">내역 추가</button>
+              <button class="btn" type="submit" id="exp-submit">내역 추가</button>
+              <button class="btn-ghost" type="button" id="exp-cancel" hidden>수정 취소</button>
             </div>
           </form>
 
@@ -409,7 +438,8 @@
   </main>
 
   <footer>
-    <p>술값으로 적은 금액은 <b>술 O</b>로 표시된 사람끼리만 나누고, 나머지 식대는 참여자 전원이 나눕니다.</p>
+    <p>참여 여부와 음주 여부는 지출 한 건마다 따로 정합니다. 1차만 있다 간 사람, 2차에서만 술을 마신 사람 모두 그대로 반영됩니다.</p>
+    <p>술값으로 적은 금액은 그 자리에서 <b>술 O</b>였던 사람끼리만 나누고, 나머지 식대는 그 자리에 있던 사람 전원이 나눕니다.</p>
     <p>금액은 1원 단위까지 정확히 나누고, 나누어떨어지지 않는 나머지는 참가자 순서대로 1원씩 배분합니다.</p>
     <p>입력한 내용은 이 브라우저에만 저장되며 어디에도 전송되지 않습니다.</p>
   </footer>
@@ -421,6 +451,8 @@
   var KEY = "nbbang-v1";
   var won = new Intl.NumberFormat("ko-KR");
   var state = { people: [], expenses: [], unit: 100, seq: 1 };
+  // 지금 입력 중인 지출의 사람별 상태 { id: {in, drank} }. editing이 있으면 그 지출을 고치는 중.
+  var form = { editing: null, members: {} };
 
   /* ── storage ─────────────────────────────── */
   function save(){
@@ -436,9 +468,18 @@
         state.people = d.people.map(function(p){
           return { id: p.id, name: p.name, drinks: p.drinks !== false };
         });
+        // 참여/음주가 지출별 기록이 되기 전 저장본은 사람의 기본값을 그 자리에 그대로 적용
         state.expenses = d.expenses.map(function(e){
+          var members;
+          if(Array.isArray(e.members)){
+            members = e.members
+              .filter(function(m){ return m && m.id; })
+              .map(function(m){ return { id: m.id, drank: !!m.drank }; });
+          } else if(Array.isArray(e.memberIds)){
+            members = e.memberIds.map(function(id){ return { id: id, drank: defaultDrinks(id) }; });
+          } else members = [];
           return { id: e.id, desc: e.desc, amount: e.amount, alcohol: Number(e.alcohol) || 0,
-                   payerId: e.payerId, memberIds: e.memberIds };
+                   payerId: e.payerId, members: members };
         });
         state.unit = [1,10,100,1000].indexOf(d.unit) >= 0 ? d.unit : 100;
         state.seq = d.seq || 1;
@@ -455,7 +496,15 @@
     var p = personOf(id);
     return p ? p.name : "(삭제됨)";
   }
-  function drinks(id){
+  // 마지막 글자의 받침을 보고 조사를 고른다
+  function eunNeun(word){
+    var c = word.charCodeAt(word.length - 1);
+    if(!(c >= 0xAC00 && c <= 0xD7A3)) return "은(는)";
+    return (c - 0xAC00) % 28 ? "은" : "는";
+  }
+
+  // 사람에 붙은 술 표시는 새 지출을 적을 때 쓰는 기본값일 뿐이다
+  function defaultDrinks(id){
     var p = personOf(id);
     return !!(p && p.drinks);
   }
@@ -468,12 +517,17 @@
     return out;
   }
 
-  // 한 건의 지출을 식대분과 주대분으로 갈라, 주대는 술 마신 사람끼리만 나눈다
+  // 살아 있는 참가자만 남긴 그 자리의 참여자 목록
+  function livingMembers(e){
+    return e.members.filter(function(m){ return !!personOf(m.id); });
+  }
+
+  // 한 건의 지출을 식대분과 주대분으로 갈라, 주대는 그 자리에서 마신 사람끼리만 나눈다
   function splitExpense(e, members){
     var alcohol = Math.min(Math.max(e.alcohol || 0, 0), e.amount);
-    var drinkers = members.filter(drinks);
+    var drinkers = members.filter(function(m){ return m.drank; }).map(function(m){ return m.id; });
     var orphan = alcohol > 0 && drinkers.length === 0;
-    if(orphan) alcohol = 0;               // 술 마시는 사람이 없으면 전원이 나눠 가진다
+    if(orphan) alcohol = 0;               // 그 자리에 마신 사람이 없으면 전원이 나눠 가진다
     var food = e.amount - alcohol;
     return { food: food, alcohol: alcohol, drinkers: drinkers, orphan: orphan };
   }
@@ -483,8 +537,9 @@
     state.people.forEach(function(p){ paid[p.id] = 0; owed[p.id] = 0; drank[p.id] = 0; });
 
     state.expenses.forEach(function(e){
-      var members = e.memberIds.filter(function(id){ return owed.hasOwnProperty(id); });
+      var members = livingMembers(e);
       if(!members.length) return;
+      var ids = members.map(function(m){ return m.id; });
       total += e.amount;
       if(paid.hasOwnProperty(e.payerId)) paid[e.payerId] += e.amount;
 
@@ -493,8 +548,8 @@
       alcoholTotal += sp.alcohol;
 
       if(sp.food > 0){
-        var f = shares(sp.food, members);
-        members.forEach(function(id){ owed[id] += f[id]; });
+        var f = shares(sp.food, ids);
+        ids.forEach(function(id){ owed[id] += f[id]; });
       }
       if(sp.alcohol > 0){
         var a = shares(sp.alcohol, sp.drinkers);
@@ -503,7 +558,7 @@
     });
 
     var rows = state.people.map(function(p){
-      return { id: p.id, name: p.name, drinks: !!p.drinks, paid: paid[p.id], owed: owed[p.id],
+      return { id: p.id, name: p.name, paid: paid[p.id], owed: owed[p.id],
                drank: drank[p.id], delta: paid[p.id] - owed[p.id] };
     });
     return { total: total, alcoholTotal: alcoholTotal, orphan: orphan, rows: rows };
@@ -551,9 +606,11 @@
       drink.className = "drink";
       drink.textContent = p.drinks ? "술 O" : "술 X";
       drink.setAttribute("aria-pressed", String(!!p.drinks));
-      drink.setAttribute("aria-label", p.name + (p.drinks ? ": 술 마심, 눌러서 빼기" : ": 술 안 마심, 눌러서 넣기"));
+      drink.setAttribute("aria-label", p.name + (p.drinks ? ": 기본값 술 마심, 눌러서 빼기" : ": 기본값 술 안 마심, 눌러서 넣기"));
       drink.addEventListener("click", function(){
         p.drinks = !p.drinks;
+        // 기본값을 바꿔도 이미 적어 둔 지출은 건드리지 않는다
+        if(!form.editing && form.members[p.id]) form.members[p.id].drank = p.drinks;
         renderAll(); save();
       });
 
@@ -566,9 +623,10 @@
         state.people = state.people.filter(function(x){ return x.id !== p.id; });
         state.expenses = state.expenses.filter(function(e){ return e.payerId !== p.id; });
         state.expenses.forEach(function(e){
-          e.memberIds = e.memberIds.filter(function(id){ return id !== p.id; });
+          e.members = e.members.filter(function(m){ return m.id !== p.id; });
         });
-        state.expenses = state.expenses.filter(function(e){ return e.memberIds.length > 0; });
+        state.expenses = state.expenses.filter(function(e){ return e.members.length > 0; });
+        delete form.members[p.id];
         renderAll(); save();
       });
       li.appendChild(span); li.appendChild(drink); li.appendChild(btn);
@@ -594,48 +652,67 @@
     });
     if(prev && state.people.some(function(p){ return p.id === prev; })) payer.value = prev;
 
-    var box = $("exp-members"), checked = {};
-    box.querySelectorAll("input[data-member]").forEach(function(i){ checked[i.value] = i.checked; });
+    var box = $("exp-members");
     box.innerHTML = "";
     if(!state.people.length) return;
 
-    var all = document.createElement("label");
-    all.className = "chk all";
-    all.innerHTML = '<input type="checkbox" id="exp-all"><span>전체</span>';
-    box.appendChild(all);
-
     state.people.forEach(function(p){
-      var lab = document.createElement("label");
-      lab.className = "chk";
-      var inp = document.createElement("input");
-      inp.type = "checkbox"; inp.value = p.id; inp.dataset.member = "1";
-      inp.checked = checked.hasOwnProperty(p.id) ? checked[p.id] : true;
-      var sp = document.createElement("span");
-      sp.textContent = p.name;
-      lab.appendChild(inp); lab.appendChild(sp);
-      box.appendChild(lab);
-      inp.addEventListener("change", function(){ syncAll(); renderSplitNote(); });
-    });
-    $("exp-all").addEventListener("change", function(){
-      var on = this.checked;
-      box.querySelectorAll("input[data-member]").forEach(function(i){ i.checked = on; });
-      renderSplitNote();
-    });
-    syncAll();
+      var m = form.members[p.id] || { in: true, drank: !!p.drinks };
+      var chip = document.createElement("span");
+      chip.className = "mchip" + (m.in ? (m.drank ? "" : " nodrink") : " out");
 
-    function syncAll(){
-      var ins = box.querySelectorAll("input[data-member]");
-      var on = ins.length > 0 && Array.prototype.every.call(ins, function(i){ return i.checked; });
-      var el = $("exp-all");
-      if(el) el.checked = on;
-    }
+      var who = document.createElement("button");
+      who.type = "button"; who.className = "who"; who.textContent = p.name;
+      who.setAttribute("aria-pressed", String(m.in));
+      who.setAttribute("aria-label", p.name + (m.in ? ": 이 자리에 있음, 눌러서 빼기" : ": 이 자리에 없음, 눌러서 넣기"));
+      who.addEventListener("click", function(){
+        m.in = !m.in;
+        form.members[p.id] = m;
+        renderExpenseForm(); renderSplitNote();
+      });
+      chip.appendChild(who);
+
+      if(m.in){
+        var dr = document.createElement("button");
+        dr.type = "button"; dr.className = "dr";
+        dr.textContent = m.drank ? "술 O" : "술 X";
+        dr.setAttribute("aria-pressed", String(m.drank));
+        dr.setAttribute("aria-label", p.name + (m.drank ? ": 이 자리에서 술 마심" : ": 이 자리에서 술 안 마심"));
+        dr.addEventListener("click", function(){
+          m.drank = !m.drank;
+          form.members[p.id] = m;
+          renderExpenseForm(); renderSplitNote();
+        });
+        chip.appendChild(dr);
+      }
+      box.appendChild(chip);
+    });
+  }
+
+  // 새 지출은 사람에 적어 둔 기본값에서 출발한다
+  function syncForm(){
+    var next = {};
+    state.people.forEach(function(p){
+      next[p.id] = form.members[p.id] || { in: true, drank: !!p.drinks };
+    });
+    form.members = next;
+  }
+  function resetForm(){
+    form.editing = null;
+    form.members = {};
+    syncForm();
+    $("exp-desc").value = "";
+    $("exp-amount").value = "";
+    $("exp-alcohol").value = "";
   }
 
   function selectedMembers(){
-    return Array.prototype.map.call(
-      $("exp-members").querySelectorAll("input[data-member]:checked"),
-      function(i){ return i.value; }
-    );
+    var out = [];
+    state.people.forEach(function(p){
+      var m = form.members[p.id];
+      if(m && m.in) out.push({ id: p.id, drank: !!m.drank });
+    });
+    return out;
   }
   function digits(el){ return Number(el.value.replace(/[^\d]/g, "")) || 0; }
 
@@ -644,46 +721,48 @@
     var note = $("split-note");
     if(!state.people.length){ note.hidden = true; return; }
     var members = selectedMembers();
+    note.hidden = false;
+    var txt = function(t){ note.appendChild(document.createTextNode(t)); };
+    var b = function(t){ var e = document.createElement("b"); e.textContent = t; note.appendChild(e); };
+
     if(!members.length){
-      note.hidden = false;
       note.className = "split-note warn";
-      note.textContent = "함께 쓴 사람을 한 명 이상 골라 주세요.";
+      note.textContent = "이 자리에 있던 사람을 한 명 이상 골라 주세요.";
       return;
     }
     var amount = digits($("exp-amount"));
     var alcohol = Math.min(digits($("exp-alcohol")), amount);
-    var drinkers = members.filter(drinks);
-    note.hidden = false;
+    var drinkers = members.filter(function(m){ return m.drank; });
+    var names = function(list){ return list.map(function(m){ return nameOf(m.id); }).join(", "); };
+    var away = state.people.length - members.length;
+
+    note.className = "split-note";
+    note.innerHTML = "";
 
     if(!alcohol){
-      note.className = "split-note";
-      note.innerHTML = "";
-      note.appendChild(document.createTextNode("전액을 " + members.length + "명이 똑같이 나눕니다."));
-      return;
-    }
-    if(!drinkers.length){
+      txt("전액을 " + members.length + "명이 똑같이 나눕니다.");
+    } else if(!drinkers.length){
       note.className = "split-note warn";
-      note.textContent = "고른 사람 중에 술 마시는 사람이 없어요. 술값도 " + members.length + "명이 나누게 됩니다.";
+      txt("이 자리에서 술 마신 사람이 없어요. 술값도 " + members.length + "명이 나누게 됩니다.");
       return;
+    } else if(amount - alcohol === 0){
+      txt("전액이 술값입니다. ");
+      b(names(drinkers) + " " + drinkers.length + "명");
+      txt("이 나눕니다.");
+    } else {
+      txt("식대 ");
+      b(won.format(amount - alcohol) + "원");
+      txt("은 " + members.length + "명이, 술값 ");
+      b(won.format(alcohol) + "원");
+      txt("은 " + names(drinkers) + " " + drinkers.length + "명이 나눕니다.");
     }
-    note.className = "split-note";
-    var food = amount - alcohol;
-    if(food === 0){
-      note.innerHTML = "";
-      note.appendChild(document.createTextNode("전액이 술값입니다. "));
-      var strong = document.createElement("b");
-      strong.textContent = drinkers.map(nameOf).join(", ") + " " + drinkers.length + "명";
-      note.appendChild(strong);
-      note.appendChild(document.createTextNode("이 나눕니다."));
-      return;
+    if(away > 0){
+      var out = state.people.filter(function(p){
+        return !members.some(function(m){ return m.id === p.id; });
+      }).map(function(p){ return p.name; });
+      var joined = out.join(", ");
+      txt(" " + joined + eunNeun(joined) + " 이 자리에 없어 한 푼도 부담하지 않습니다.");
     }
-    var b = function(t){ var e = document.createElement("b"); e.textContent = t; return e; };
-    note.innerHTML = "";
-    note.appendChild(document.createTextNode("식대 "));
-    note.appendChild(b(won.format(food) + "원"));
-    note.appendChild(document.createTextNode("은 " + members.length + "명이, 술값 "));
-    note.appendChild(b(won.format(alcohol) + "원"));
-    note.appendChild(document.createTextNode("은 " + drinkers.map(nameOf).join(", ") + " " + drinkers.length + "명이 나눕니다."));
   }
 
   function renderExpenses(){
@@ -705,18 +784,20 @@
 
       var td1 = document.createElement("td");
       td1.textContent = e.desc;
+      var mem = livingMembers(e);
       var who = document.createElement("div");
       who.className = "who";
-      who.textContent = e.memberIds.length === state.people.length && state.people.length
-        ? "전체 " + e.memberIds.length + "명"
-        : e.memberIds.map(nameOf).join(", ");
+      who.textContent = (mem.length === state.people.length && state.people.length)
+        ? "전체 " + mem.length + "명"
+        : mem.map(function(m){ return nameOf(m.id); }).join(", ") + " " + mem.length + "명";
       td1.appendChild(who);
 
-      var sp = splitExpense(e, e.memberIds.filter(function(id){ return !!personOf(id); }));
+      var sp = splitExpense(e, mem);
       if(sp.alcohol > 0){
         var tag = document.createElement("span");
         tag.className = "tag";
-        tag.textContent = "술 " + won.format(sp.alcohol) + " / " + sp.drinkers.length + "명";
+        tag.textContent = "술 " + won.format(sp.alcohol) + " · " +
+          (sp.drinkers.length === mem.length ? "전원" : sp.drinkers.map(nameOf).join(", "));
         td1.appendChild(tag);
       }
 
@@ -729,15 +810,26 @@
 
       var td4 = document.createElement("td");
       td4.style.width = "1%";
+      var acts = document.createElement("div");
+      acts.className = "acts";
+
+      var edit = document.createElement("button");
+      edit.type = "button"; edit.className = "edit"; edit.textContent = "수정";
+      edit.setAttribute("aria-label", e.desc + " 고치기");
+      edit.addEventListener("click", function(){ startEdit(e); });
+
       var del = document.createElement("button");
       del.type = "button"; del.className = "del"; del.textContent = "×";
       del.setAttribute("aria-label", e.desc + " 삭제");
       del.addEventListener("click", function(){
         state.expenses = state.expenses.filter(function(x){ return x.id !== e.id; });
+        if(form.editing === e.id) resetForm();
         renderAll(); save();
       });
-      td4.appendChild(del);
+      acts.appendChild(edit); acts.appendChild(del);
+      td4.appendChild(acts);
 
+      if(form.editing === e.id) tr.className = "editing";
       tr.appendChild(td1); tr.appendChild(td2); tr.appendChild(td3); tr.appendChild(td4);
       tb.appendChild(tr);
     });
@@ -761,7 +853,7 @@
       head.textContent = "참가자를 먼저 추가해 주세요.";
     } else {
       var avg = Math.round(r.total / state.people.length);
-      var drinkers = state.people.filter(function(p){ return p.drinks; }).length;
+      var drinkers = r.rows.filter(function(x){ return x.drank > 0; }).length;
       head.innerHTML = state.people.length + "명 · 1인 평균 <b>" + won.format(avg) + "원</b>" +
         (r.alcoholTotal > 0
           ? '<br>그중 술값 <b>' + won.format(r.alcoholTotal) + "원</b>을 " + drinkers + "명이 부담"
@@ -788,7 +880,7 @@
       var sub = document.createElement("div");
       sub.className = "bal-sub";
       sub.innerHTML = '<span>낸 돈 ' + won.format(x.paid) + '</span><span>낼 몫 ' + won.format(x.owed) + '</span>' +
-        (x.drank > 0 ? '<span>술 ' + won.format(x.drank) + '</span>' : (x.drinks ? '' : '<span>술 X</span>'));
+        (x.drank > 0 ? '<span>술 ' + won.format(x.drank) + '</span>' : '');
 
       var bar = document.createElement("div");
       bar.className = "bar";
@@ -818,7 +910,7 @@
 
     var note = $("round-note");
     var lines = [];
-    if(r.orphan) lines.push("술 마시는 사람이 아무도 없는 지출이 있어 그 술값은 참여자 전원이 나눴습니다.");
+    if(r.orphan) lines.push("술 마신 사람이 아무도 없는 지출이 있어 그 술값은 그 자리의 참여자 전원이 나눴습니다.");
     if(t.rounded) lines.push(won.format(state.unit) + "원 단위로 반올림했어요. 실제 잔액과 조금 차이가 날 수 있습니다.");
     if(lines.length){
       note.hidden = false;
@@ -846,9 +938,19 @@
     L.push("정산 결과");
     L.push("총 " + won.format(r.total) + "원 · " + state.people.length + "명");
     if(r.alcoholTotal > 0){
-      var dr = state.people.filter(function(p){ return p.drinks; });
-      L.push("술값 " + won.format(r.alcoholTotal) + "원은 " + dr.map(function(p){ return p.name; }).join(", ") + " " + dr.length + "명 부담");
+      var dr = r.rows.filter(function(x){ return x.drank > 0; });
+      L.push("술값 " + won.format(r.alcoholTotal) + "원은 " + dr.map(function(x){ return x.name; }).join(", ") + " " + dr.length + "명 부담");
     }
+    L.push("");
+    L.push("[ 차수별 ]");
+    state.expenses.forEach(function(e){
+      var mem = livingMembers(e);
+      if(!mem.length) return;
+      var sp = splitExpense(e, mem);
+      L.push(e.desc + "  " + won.format(e.amount) + "원 (" + nameOf(e.payerId) + " 결제)");
+      L.push("  참여 " + mem.map(function(m){ return nameOf(m.id); }).join(", ") +
+             (sp.alcohol > 0 ? " / 술 " + won.format(sp.alcohol) + "원 " + sp.drinkers.map(nameOf).join(", ") : ""));
+    });
     L.push("");
     if(t.list.length){
       L.push("[ 보낼 돈 ]");
@@ -863,7 +965,7 @@
     L.push("[ 개인별 ]");
     r.rows.forEach(function(x){
       var sign = x.delta > 0 ? "+" : "";
-      L.push(x.name + (x.drinks ? "" : "(술X)") + "  낸 돈 " + won.format(x.paid) +
+      L.push(x.name + "  낸 돈 " + won.format(x.paid) +
              " / 낼 몫 " + won.format(x.owed) + (x.drank > 0 ? "(술 " + won.format(x.drank) + ")" : "") +
              " (" + sign + won.format(x.delta) + ")");
     });
@@ -872,8 +974,10 @@
 
   function renderAll(){
     renderPeople();
+    syncForm();
     renderExpenseForm();
     renderSplitNote();
+    renderEditState();
     renderExpenses();
     renderResult();
   }
@@ -887,11 +991,51 @@
     if(!names.length){ input.focus(); return; }
     names.forEach(function(n){
       if(state.people.some(function(p){ return p.name === n; })) return;
-      state.people.push({ id: nextId(), name: n.slice(0, 12), drinks: true });
+      var np = { id: nextId(), name: n.slice(0, 12), drinks: true };
+      state.people.push(np);
+      form.members[np.id] = { in: true, drank: true };
     });
     input.value = "";
     input.focus();
     renderAll(); save();
+  });
+
+  function renderEditState(){
+    var editing = form.editing && state.expenses.some(function(e){ return e.id === form.editing; });
+    if(!editing) form.editing = null;
+    $("exp-submit").textContent = editing ? "수정 저장" : "내역 추가";
+    $("exp-cancel").hidden = !editing;
+  }
+
+  function startEdit(e){
+    form.editing = e.id;
+    form.members = {};
+    state.people.forEach(function(p){
+      var m = e.members.find(function(x){ return x.id === p.id; });
+      form.members[p.id] = { in: !!m, drank: m ? !!m.drank : !!p.drinks };
+    });
+    $("exp-desc").value = e.desc;
+    $("exp-amount").value = e.amount ? won.format(e.amount) : "";
+    $("exp-alcohol").value = e.alcohol ? won.format(e.alcohol) : "";
+    renderAll();
+    $("exp-payer").value = e.payerId;          // 렌더로 다시 그려진 뒤에 골라야 남는다
+    $("exp-desc").focus();
+  }
+
+  $("exp-cancel").addEventListener("click", function(){
+    resetForm(); renderAll();
+  });
+
+  $("member-quick").addEventListener("click", function(ev){
+    var b = ev.target.closest("button[data-q]");
+    if(!b) return;
+    var q = b.dataset.q;
+    state.people.forEach(function(p){
+      var m = form.members[p.id] || (form.members[p.id] = { in: true, drank: !!p.drinks });
+      if(q === "all"){ m.in = true; }
+      else { m.in = true; m.drank = (q === "drink"); }
+    });
+    renderExpenseForm(); renderSplitNote();
   });
 
   var amountInput = $("exp-amount"), alcoholInput = $("exp-alcohol");
@@ -915,12 +1059,18 @@
       return;
     }
     var desc = $("exp-desc").value.trim() || "지출 " + (state.expenses.length + 1);
-    state.expenses.push({ id: nextId(), desc: desc.slice(0, 30), amount: amount, alcohol: alcohol,
-                          payerId: payer, memberIds: members });
-    $("exp-desc").value = "";
-    amountInput.value = "";
-    alcoholInput.value = "";
-    $("exp-members").querySelectorAll("input[type=checkbox]").forEach(function(i){ i.checked = true; });
+    var idx = form.editing
+      ? state.expenses.findIndex(function(x){ return x.id === form.editing; })
+      : -1;
+    if(idx >= 0){
+      var e = state.expenses[idx];
+      e.desc = desc.slice(0, 30); e.amount = amount; e.alcohol = alcohol;
+      e.payerId = payer; e.members = members;
+    } else {
+      state.expenses.push({ id: nextId(), desc: desc.slice(0, 30), amount: amount, alcohol: alcohol,
+                            payerId: payer, members: members });
+    }
+    resetForm();
     $("exp-desc").focus();
     renderAll(); save();
   });
@@ -936,6 +1086,7 @@
     if(!state.people.length && !state.expenses.length) return;
     if(!confirm("참가자와 지출 내역을 모두 지울까요?")) return;
     state.people = []; state.expenses = []; state.seq = 1;
+    resetForm();
     renderAll(); save();
   });
 
@@ -985,6 +1136,7 @@
   });
 
   load();
+  syncForm();
   renderAll();
 })();
 </script>
