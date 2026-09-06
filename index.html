@@ -161,6 +161,7 @@
 
   .row{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap}
   .hint{font-size:12.5px;color:var(--ink-3);margin:8px 0 0}
+  .hint.alert{color:var(--neg)}
 
   /* ── participants ───────────────────────────── */
   .people{display:flex;flex-wrap:wrap;gap:7px;margin-top:14px;padding:0;list-style:none}
@@ -209,6 +210,12 @@
   .split-note.warn{border-left-color:var(--neg);color:var(--neg)}
   .split-note b{color:var(--ink);font-weight:600}
   .split-note em{display:block;margin-top:4px;font-style:normal;color:var(--neg)}
+  .split-note em.info{color:var(--ink-2)}
+  @keyframes noteflash{0%,100%{background:var(--stripe)}35%{background:var(--soft-bg)}}
+  .split-note.flash{animation:noteflash .55s ease}
+  @media (prefers-reduced-motion:reduce){
+    .split-note.flash{animation:none;outline:2px solid var(--neg);outline-offset:1px}
+  }
   .field-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px 12px;flex-wrap:wrap}
   .quick{display:flex;gap:4px;flex-wrap:wrap}
   .quick button{
@@ -358,7 +365,7 @@
             </label>
             <button class="btn" type="submit">추가</button>
           </form>
-          <p class="hint">쉼표나 띄어쓰기로 여러 명을 한 번에 넣을 수 있어요.</p>
+          <p class="hint" id="person-hint">쉼표나 띄어쓰기로 여러 명을 한 번에 넣을 수 있어요.</p>
           <ul class="people" id="people-list"></ul>
           <p class="legend" id="people-legend" hidden>
             <span><b>술</b> 술값 부담</span>
@@ -465,7 +472,7 @@
   <footer>
     <p>참여 여부와 음주 여부는 지출 한 건마다 따로 정합니다. 1차만 있다 간 사람, 2차에서만 술을 마신 사람 모두 그대로 반영됩니다.</p>
     <p>술값은 그 자리에서 술을 마신 사람끼리, 음료값은 음료를 마신 사람끼리 나누고, 남은 식대는 그 자리에 있던 사람 전원이 나눕니다.</p>
-    <p>금액은 1원 단위까지 정확히 나누고, 나누어떨어지지 않는 나머지는 참가자 순서대로 1원씩 배분합니다.</p>
+    <p>금액은 1원 단위까지 정확히 나눕니다. 나누어떨어지지 않는 나머지 1원은 차수마다 순서를 옮겨 가며 배분해, 같은 사람만 계속 더 내지 않게 합니다.</p>
     <p>입력한 내용은 이 브라우저에만 저장되며 어디에도 전송되지 않습니다.</p>
   </footer>
 </div>
@@ -550,10 +557,13 @@
   }
 
   /* ── math ────────────────────────────────── */
-  // 금액을 참가자 수로 나누고, 나머지 1원은 앞 순서부터 배분
-  function shares(amount, ids){
+  // 금액을 참가자 수로 나누고, 나누어떨어지지 않는 나머지 1원씩을 배분한다.
+  // 시작 위치를 offset으로 돌려, 매번 같은 사람만 더 내는 일이 없게 한다.
+  function shares(amount, ids, offset){
     var n = ids.length, base = Math.floor(amount / n), rem = amount - base * n, out = {};
-    ids.forEach(function(id, i){ out[id] = base + (i < rem ? 1 : 0); });
+    ids.forEach(function(id){ out[id] = base; });
+    var k = ((offset || 0) % n + n) % n;
+    for(var j = 0; j < rem; j++) out[ids[(k + j) % n]] += 1;
     return out;
   }
 
@@ -587,6 +597,7 @@
       paid[p.id] = 0; owed[p.id] = 0; drank[p.id] = 0; sipped[p.id] = 0;
     });
 
+    var seat = 0;
     state.expenses.forEach(function(e){
       var members = livingMembers(e);
       if(!members.length) return;
@@ -600,15 +611,15 @@
       softTotal += sp.soft;
 
       if(sp.food > 0){
-        var f = shares(sp.food, ids);
+        var f = shares(sp.food, ids, seat++);
         ids.forEach(function(id){ owed[id] += f[id]; });
       }
       if(sp.alcohol > 0){
-        var a = shares(sp.alcohol, sp.drinkers);
+        var a = shares(sp.alcohol, sp.drinkers, seat++);
         sp.drinkers.forEach(function(id){ owed[id] += a[id]; drank[id] += a[id]; });
       }
       if(sp.soft > 0){
-        var d = shares(sp.soft, sp.softers);
+        var d = shares(sp.soft, sp.softers, seat++);
         sp.softers.forEach(function(id){ owed[id] += d[id]; sipped[id] += d[id]; });
       }
     });
@@ -643,8 +654,8 @@
       t.amount = unit > 1 ? Math.round(t.exact / unit) * unit : t.exact;
       if(t.amount !== t.exact) rounded = true;
     });
-    out = out.filter(function(t){ return t.amount > 0; });
-    return { list: out, rounded: rounded };
+    var kept = out.filter(function(t){ return t.amount > 0; });
+    return { list: kept, rounded: rounded, dropped: out.length - kept.length };
   }
 
   /* ── render ──────────────────────────────── */
@@ -679,6 +690,13 @@
       btn.setAttribute("aria-label", p.name + " 빼기");
       btn.textContent = "×";
       btn.addEventListener("click", function(){
+        // 결제자가 사라지면 낸 돈이 갈 곳이 없어져 그 지출을 함께 지워야 한다
+        var paidRounds = state.expenses.filter(function(e){ return e.payerId === p.id; });
+        if(paidRounds.length){
+          var titles = paidRounds.map(function(e){ return e.desc; }).join(", ");
+          if(!confirm(p.name + "님이 결제한 지출 " + paidRounds.length + "건(" + titles +
+                      ")도 함께 지워집니다.\n계속할까요?")) return;
+        }
         state.people = state.people.filter(function(x){ return x.id !== p.id; });
         state.expenses = state.expenses.filter(function(e){ return e.payerId !== p.id; });
         state.expenses.forEach(function(e){
@@ -853,6 +871,15 @@
       var joined = out.join(", ");
       note.appendChild(document.createTextNode(" " + joined + eunNeun(joined) + " 이 자리에 없어 한 푼도 부담하지 않습니다."));
     }
+
+    var payer = $("exp-payer").value;
+    if(payer && !members.some(function(m){ return m.id === payer; })){
+      var info = document.createElement("em");
+      info.className = "info";
+      info.textContent = "결제자 " + nameOf(payer) + eunNeun(nameOf(payer)) +
+        " 이 자리에 없는 사람이에요. 대신 결제한 게 맞다면 그대로 두세요.";
+      note.appendChild(info);
+    }
   }
 
   function renderExpenses(){
@@ -1011,7 +1038,8 @@
     var note = $("round-note");
     var lines = [];
     if(r.orphan) lines.push("마신 사람이 아무도 없는 술값이나 음료값이 있어, 그만큼은 그 자리의 참여자 전원이 나눴습니다.");
-    if(t.rounded) lines.push(won.format(state.unit) + "원 단위로 반올림했어요. 실제 잔액과 조금 차이가 날 수 있습니다.");
+    if(t.rounded && t.list.length) lines.push(won.format(state.unit) + "원 단위로 반올림했어요." +
+      (t.dropped > 0 ? " 단위보다 작은 " + t.dropped + "건은 빠졌습니다." : " 실제 잔액과 조금 차이가 날 수 있습니다."));
     if(lines.length){
       note.hidden = false;
       note.textContent = lines.join(" ");
@@ -1022,7 +1050,9 @@
       empty.hidden = true;
     } else {
       empty.hidden = false;
-      empty.textContent = r.total > 0 ? "딱 맞아떨어졌어요. 주고받을 돈이 없습니다." : "아직 정산할 금액이 없어요.";
+      empty.textContent = t.dropped > 0
+        ? won.format(state.unit) + "원 단위로 반올림하니 주고받을 금액이 남지 않았어요. 단위를 낮추면 정확히 나옵니다."
+        : (r.total > 0 ? "딱 맞아떨어졌어요. 주고받을 돈이 없습니다." : "아직 정산할 금액이 없어요.");
     }
 
     Array.prototype.forEach.call($("unit-pick").children, function(b){
@@ -1094,22 +1124,51 @@
   }
 
   /* ── events ──────────────────────────────── */
+  var HINT = "쉼표나 띄어쓰기로 여러 명을 한 번에 넣을 수 있어요.";
+  var hintTimer;
+  function personHint(msg){
+    var el = $("person-hint");
+    el.textContent = msg || HINT;
+    el.classList.toggle("alert", !!msg);
+    clearTimeout(hintTimer);
+    if(msg) hintTimer = setTimeout(function(){ personHint(null); }, 4000);
+  }
+
   $("person-form").addEventListener("submit", function(ev){
     ev.preventDefault();
     var input = $("person-name");
     var names = input.value.split(/[,，\s]+/).map(function(s){ return s.trim(); })
                  .filter(function(s){ return s.length; });
-    if(!names.length){ input.focus(); return; }
+    if(!names.length){
+      personHint("추가할 이름을 적어 주세요.");
+      input.focus();
+      return;
+    }
+    var dupes = [];
     names.forEach(function(n){
-      if(state.people.some(function(p){ return p.name === n; })) return;
-      var np = { id: nextId(), name: n.slice(0, 12), drinks: true };
+      var name = n.slice(0, 12);
+      if(state.people.some(function(p){ return p.name === name; })){ dupes.push(name); return; }
+      var np = { id: nextId(), name: name, drinks: true, soft: false };
       state.people.push(np);
       form.members[np.id] = { in: true, drank: true, soft: false };
     });
+    personHint(dupes.length
+      ? "이미 있는 이름이라 건너뛰었어요: " + dupes.join(", ") + ". 구분되게 적어 주세요."
+      : null);
     input.value = "";
     input.focus();
     renderAll(); save();
   });
+
+  // 제출이 막힌 이유를 눈에 띄게 알린다
+  function flashNote(){
+    var note = $("split-note");
+    note.hidden = false;
+    note.classList.remove("flash");
+    void note.offsetWidth;
+    note.classList.add("flash");
+    note.scrollIntoView({ block: "nearest" });
+  }
 
   function renderEditState(){
     var editing = form.editing && state.expenses.some(function(e){ return e.id === form.editing; });
@@ -1134,6 +1193,8 @@
     $("exp-payer").value = e.payerId;          // 렌더로 다시 그려진 뒤에 골라야 남는다
     $("exp-desc").focus();
   }
+
+  $("exp-payer").addEventListener("change", renderSplitNote);
 
   $("exp-cancel").addEventListener("click", function(){
     resetForm(); renderAll();
@@ -1172,10 +1233,9 @@
     var soft = Math.min(digits(softInput), amount - alcohol);
     var members = selectedMembers();
     var payer = $("exp-payer").value;
-    if(!amount || !payer || !members.length){
-      if(!amount) amountInput.focus();
-      return;
-    }
+    if(!members.length){ renderSplitNote(); flashNote(); return; }
+    if(!amount){ amountInput.focus(); return; }
+    if(!payer) return;
     var desc = $("exp-desc").value.trim() || "지출 " + (state.expenses.length + 1);
     var idx = form.editing
       ? state.expenses.findIndex(function(x){ return x.id === form.editing; })
