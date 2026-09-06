@@ -219,18 +219,24 @@
 
   .chks{display:flex;flex-wrap:wrap;gap:6px}
   .mchip{
-    display:inline-flex;align-items:center;gap:5px;
-    padding:4px 5px 4px 11px;border:1px solid var(--rule-strong);border-radius:999px;
+    display:inline-flex;align-items:stretch;gap:4px;
+    padding:0 3px 0 0;border:1px solid var(--rule-strong);border-radius:999px;
     background:var(--accent-soft);font-size:13px;
   }
   .mchip .who{
-    padding:0;background:transparent;border:0;color:var(--ink);
-    font-family:var(--sans);font-size:13px;font-weight:600;
+    display:flex;align-items:center;
+    padding:7px 6px 7px 12px;background:transparent;border:0;border-radius:999px;
+    color:var(--ink);font-family:var(--sans);font-size:13px;font-weight:600;
   }
-  .mchip .badge{font-size:10px;padding:2px 7px}
+  .mchip .badge{align-self:center}
+  .mchip .who:hover{background:var(--card)}
+  .mchip.out .who:hover{background:var(--stripe)}
+  .mchip .badge{font-size:10px;padding:4px 8px}
   .mchip.plain{background:transparent}
-  .mchip.out{background:transparent;border-style:dashed;padding-right:11px}
-  .mchip.out .who{color:var(--ink-3);text-decoration:line-through}
+  .mchip.out{background:transparent;border-style:dashed}
+  .mchip.out .who{text-decoration:line-through;color:var(--ink-3)}
+  .badge.away{background:transparent;color:var(--ink-3);border-style:dashed}
+
 
   /* ── ledger list ────────────────────────────── */
   .ledger{width:100%;min-width:352px;border-collapse:collapse;font-size:14px}
@@ -394,7 +400,7 @@
             </div>
             <div class="field">
               <span class="field-head">
-                <span class="field-label">이 자리에 있던 사람</span>
+                <span class="field-label" id="member-label">이 자리에 있던 사람</span>
                 <span class="quick" id="member-quick">
                   <button type="button" data-q="all">전원 참여</button>
                   <button type="button" data-q="drink">모두 술</button>
@@ -707,6 +713,13 @@
 
     var box = $("exp-members");
     box.innerHTML = "";
+    var here = state.people.filter(function(p){
+      var m = form.members[p.id];
+      return !m || m.in;
+    }).length;
+    $("member-label").textContent = state.people.length
+      ? "이 자리에 있던 사람 " + here + "/" + state.people.length + "명"
+      : "이 자리에 있던 사람";
     if(!state.people.length) return;
 
     state.people.forEach(function(p){
@@ -738,6 +751,14 @@
         var d = makeBadge("soft", m.soft, "음료", toggle("soft"));
         d.setAttribute("aria-label", p.name + ": 이 자리에서 음료 " + (m.soft ? "마심" : "안 마심"));
         chip.appendChild(a); chip.appendChild(d);
+      } else {
+        var back = makeBadge("away", false, "불참", function(){
+          m.in = true;
+          form.members[p.id] = m;
+          renderExpenseForm(); renderSplitNote();
+        });
+        back.setAttribute("aria-label", p.name + ": 이 자리에 없음, 눌러서 넣기");
+        chip.appendChild(back);
       }
       box.appendChild(chip);
     });
@@ -1125,8 +1146,11 @@
     state.people.forEach(function(p){
       var m = form.members[p.id] ||
               (form.members[p.id] = { in: true, drank: !!p.drinks, soft: !!p.soft });
-      if(q === "all"){ m.in = true; }
-      else { m.in = true; m.drank = (q === "drink"); m.soft = (q === "soft"); }
+      if(q === "all"){ m.in = true; return; }
+      // 술·음료 일괄 지정은 이 자리에 있는 사람에게만. 빼 둔 사람을 되돌리지 않는다.
+      if(!m.in) return;
+      m.drank = (q === "drink");
+      m.soft = (q === "soft");
     });
     renderExpenseForm(); renderSplitNote();
   });
